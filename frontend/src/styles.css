@@ -1,0 +1,240 @@
+:root {
+  --bg: #f5f6f8;
+  --card: #ffffff;
+  --border: #e2e5ea;
+  --text: #1f2430;
+  --muted: #6b7280;
+  --accent: #2563eb;
+  --vuln: #dc2626;
+  --safe: #16a34a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+}
+
+.page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.topbar h1 {
+  font-size: 1.4rem;
+  margin: 0;
+}
+
+.mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #fff;
+  user-select: none;
+}
+.mode.vuln {
+  background: var(--vuln);
+}
+.mode.safe {
+  background: var(--safe);
+}
+
+.hint {
+  color: var(--muted);
+  line-height: 1.7;
+  font-size: 0.92rem;
+}
+
+.payloads {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+.payloads__title {
+  font-size: 0.85rem;
+  color: var(--muted);
+  width: 100%;
+}
+.payloads button {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.payloads button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.form {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.form__author {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  max-width: 200px;
+}
+.form__body {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  resize: vertical;
+}
+.form__actions {
+  display: flex;
+  gap: 10px;
+}
+.form button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 18px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.form button.ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.error {
+  color: var(--vuln);
+  font-size: 0.9rem;
+}
+
+.comments {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+.comment {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.comment__meta {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+.comment__author {
+  font-weight: 700;
+}
+.comment__time {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.comment__body {
+  line-height: 1.7;
+  word-break: break-word;
+}
+.comment__body a {
+  color: var(--accent);
+}
+
+.foot {
+  margin-top: 40px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ===== アプリ共通シェル / タブ ===== */
+.apphead { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+.apphead h1 { font-size:1.3rem; margin:0; }
+.nav { display:flex; gap:8px; }
+.nav button, .ai__tabs button, .ai__modes .chip {
+  cursor:pointer; border:1px solid var(--border); background:#fff; border-radius:8px; padding:8px 12px; font-size:0.9rem;
+}
+.nav button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+/* ===== AI Lab ===== */
+.ai__intro {
+  background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:12px 14px;
+  font-size:0.9rem; line-height:1.7; margin-bottom:14px;
+}
+.ai__modes { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+.ai__modes-title { font-size:0.82rem; color:var(--muted); }
+.chip { font-weight:600; }
+.chip.vuln.on { background:var(--vuln); color:#fff; border-color:var(--vuln); }
+.chip.mid.on  { background:#d97706; color:#fff; border-color:#d97706; }
+.chip.safe.on { background:var(--safe); color:#fff; border-color:var(--safe); }
+
+.ai__tabs { display:flex; gap:8px; margin-bottom:12px; }
+.ai__tabs button.on { background:#111827; color:#fff; border-color:#111827; }
+
+.ai__input {
+  width:100%; padding:10px; border:1px solid var(--border); border-radius:8px;
+  font-family:inherit; resize:vertical;
+}
+.ai__actions { display:flex; gap:10px; margin:10px 0; }
+.ai__actions button, .form button, .steal button {
+  background:var(--accent); color:#fff; border:none; border-radius:8px; padding:9px 18px; cursor:pointer; font-weight:600;
+}
+.ai__actions button.ghost, .form button.ghost, .steal button.ghost {
+  background:transparent; color:var(--muted); border:1px solid var(--border);
+}
+
+.ai__out { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-top:8px; }
+.ai__out-head { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; font-size:0.85rem; color:var(--muted); }
+.badge { font-size:0.72rem; background:#f1f5f9; border:1px solid var(--border); border-radius:999px; padding:2px 10px; }
+.ai__bubble { line-height:1.7; word-break:break-word; }
+.ai__bubble a { color:var(--accent); }
+
+.steal { margin-top:18px; background:#fff7ed; border:1px solid #fed7aa; border-radius:12px; padding:12px 14px; }
+.steal__head { display:flex; justify-content:space-between; align-items:center; font-weight:700; color:#9a3412; }
+.steal__empty { color:var(--muted); font-size:0.88rem; }
+.steal ul { margin:8px 0 0; padding-left:18px; }
+.steal code { background:#fff; border:1px solid #fed7aa; border-radius:4px; padding:1px 6px; word-break:break-all; }
+
+/* ===== ローディング・スピナー ===== */
+.spinner {
+  display:inline-block; width:15px; height:15px;
+  border:2px solid rgba(255,255,255,0.5); border-top-color:#fff;
+  border-radius:50%; animation:spin 0.7s linear infinite;
+  vertical-align:-2px; margin-right:7px;
+}
+.ai__loading {
+  display:flex; align-items:center; gap:4px;
+  color:var(--muted); font-size:0.9rem; margin:10px 0;
+}
+.ai__loading .spinner {
+  border:2px solid #cbd5e1; border-top-color:var(--accent);
+}
+@keyframes spin { to { transform:rotate(360deg); } }
