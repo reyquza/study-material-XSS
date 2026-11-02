@@ -8,13 +8,13 @@ export function App() {
   return (
     <div className="page">
       <header className="apphead">
-        <h1>XSS 勉強会</h1>
+        <h1>XSS Security Lab</h1>
         <nav className="nav">
           <button className={view === "ai" ? "on" : ""} onClick={() => setView("ai")}>
-            AI実習（メイン）
+            AI Lab (main)
           </button>
           <button className={view === "comment" ? "on" : ""} onClick={() => setView("comment")}>
-            コメント掲示板（基礎）
+            Comment Board (basics)
           </button>
         </nav>
       </header>
@@ -22,7 +22,7 @@ export function App() {
       {view === "ai" ? <AiLab /> : <CommentBoard />}
 
       <footer className="foot">
-        教材のため、わざと脆弱に作っています。攻撃の練習は自分のローカル環境だけで。本番コードにコピーしないこと。
+        Intentionally vulnerable for learning. Only attack your own local environment. Never copy this code into production.
       </footer>
     </div>
   );

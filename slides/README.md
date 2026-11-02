@@ -1,42 +1,44 @@
 # Slides — Marp
 
-`slides.md` が本体（発表用スライド）、`原稿.md` が発表カンペです。
-**Markdownなので、テキストエディタで自由に編集できます。**
+`slides.md` is the deck; `script.md` is the speaker script.
+**They're Markdown, so you can edit them freely in any text editor.**
 
-## 編集のしかた
+## How to edit
 
-- 各スライドは `---`（区切り線）で区切られています。
-- `<!-- ... -->` は **発表者ノート**（プレゼン時に自分だけ見えるメモ）です。
-  スライド本体は文字を詰め込みすぎず、詳しい説明はここに書いています。
-- 見た目（色・文字サイズ）は先頭の `style:` ブロックで調整できます。
-- `<div class="term">` は用語解説（緑）、`<div class="warn">` は注意（赤）のボックスです。
+- Each slide is separated by `---`.
+- `<!-- ... -->` are **speaker notes** (visible only to you when presenting).
+  The slide body is kept light; detailed explanations live in the notes and in `script.md`.
+- Adjust the look (colors, font sizes) in the `style:` block at the top.
+- `<div class="term">` is a glossary box (green); `<div class="warn">` is a warning box (red).
+- Each content slide follows a **Title / Message / Body** structure: a heading, one bold "message" line
+  asserting the slide's single point, then the supporting body.
 
-## プレビュー
+## Preview
 
-**VS Code（おすすめ）**
-拡張機能「**Marp for VS Code**」を入れると、その場でプレビューしながら編集できます。
+**VS Code (recommended)**
+Install the **"Marp for VS Code"** extension to preview while editing.
 
-**コマンドライン（bun）**
+**Command line (bun)**
 ```bash
-# ブラウザでライブプレビュー
+# Live preview in the browser
 bunx @marp-team/marp-cli slides/slides.md --preview
 
-# HTMLに書き出し（このファイル単体を配布できる）
+# Export to a single distributable HTML file
 bunx @marp-team/marp-cli slides/slides.md -o slides.html
 
-# PDFに書き出し
+# Export to PDF
 bunx @marp-team/marp-cli slides/slides.md --pdf
 
-# PowerPoint(.pptx)に書き出し（PowerPointで最終調整したい場合）
+# Export to PowerPoint (.pptx)
 bunx @marp-team/marp-cli slides/slides.md --pptx
 ```
 
-## 発表者ノートを見ながら発表するには
+## Presenting with speaker notes
 
-- HTML書き出し時に `--html` プレゼンモード、またはVS Codeのプレビューから「プレゼンテーション」を開くと、
-  発表者ビュー（次のスライド＋ノート表示）が使えます。
-- PDF/PPTXにノートを含めたい場合は `--notes` オプションでノートだけの書き出しも可能です。
+- Use the HTML presenter mode, or open "Presentation" from the VS Code preview, to get the presenter view
+  (next slide + notes).
+- To export just the notes as text:
 
 ```bash
-bunx @marp-team/marp-cli slides/slides.md --notes   # 発表者ノートをテキスト出力
+bunx @marp-team/marp-cli slides/slides.md --notes
 ```

@@ -1,7 +1,7 @@
 [project]
 name = "xss-comment-backend"
 version = "0.2.0"
-description = "勉強会用: わざと脆弱なコメント掲示板 + AI(LLM出力XSS)デモのバックエンド (FastAPI)"
+description = "Backend (FastAPI) for an intentionally vulnerable comment board + AI (LLM-output XSS) demo"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",

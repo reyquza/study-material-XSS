@@ -2,25 +2,26 @@ import { useEffect, useState } from "react";
 import { fetchComments, postComment, resetComments, type Comment } from "./api";
 import { renderComment } from "./render";
 
-// 攻撃ペイロードの例。URL内に半角スペース/日本語を入れない（markdownがリンクと解釈できなくなる）。
+// Attack payloads. Keep NO ASCII spaces / non-ASCII inside the URL part of a Markdown link,
+// otherwise Markdown won't parse it as a link (it becomes plain text).
 const PAYLOADS: { label: string; body: string }[] = [
   {
-    label: "① markdownリンクの罠（クリックで発火）",
-    body: "[🎁 クリックして景品を受け取る](javascript:alert(document.cookie))",
+    label: "#1 Markdown link trap (fires on click)",
+    body: "[🎁 Click to claim your prize](javascript:alert(document.cookie))",
   },
   {
-    label: "② img onerror（自動で発火）",
+    label: "#2 img onerror (fires automatically)",
     body: '<img src=x onerror="alert(document.cookie)">',
   },
   {
-    label: "③ 文中に紛れた偽リンク",
-    body: "詳しくは [公式サイト](javascript:alert('XSS')) をご確認ください",
+    label: "#3 fake link hidden in a sentence",
+    body: "See the [official site](javascript:alert('XSS')) for details",
   },
 ];
 
 export function CommentBoard() {
   const [comments, setComments] = useState<Comment[]>([]);
-  const [author, setAuthor] = useState("名無し");
+  const [author, setAuthor] = useState("Anonymous");
   const [body, setBody] = useState("");
   const [safeMode, setSafeMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +41,7 @@ export function CommentBoard() {
     e.preventDefault();
     if (!body.trim()) return;
     try {
-      await postComment(author.trim() || "名無し", body);
+      await postComment(author.trim() || "Anonymous", body);
       setBody("");
       await reload();
     } catch (e) {
@@ -57,16 +58,16 @@ export function CommentBoard() {
     <div>
       <div className="topbar">
         <p className="hint" style={{ margin: 0 }}>
-          基礎パート。コメントは <strong>markdown</strong> 可。攻撃例を投稿し、モードを切り替えて観察。
+          Basics. Comments support <strong>markdown</strong>. Post an attack example and toggle the mode to observe.
         </p>
         <label className={`mode ${safeMode ? "safe" : "vuln"}`}>
           <input type="checkbox" checked={safeMode} onChange={(e) => setSafeMode(e.target.checked)} />
-          {safeMode ? "対策モード（DOMPurify）" : "脆弱モード（無防備）"}
+          {safeMode ? "Safe mode (DOMPurify)" : "Vulnerable mode (defenseless)"}
         </label>
       </div>
 
       <div className="payloads">
-        <span className="payloads__title">攻撃ペイロードを投稿欄に入れる:</span>
+        <span className="payloads__title">Load an attack payload into the box:</span>
         {PAYLOADS.map((p) => (
           <button key={p.label} type="button" onClick={() => setBody(p.body)}>
             {p.label}
@@ -79,19 +80,19 @@ export function CommentBoard() {
           className="form__author"
           value={author}
           onChange={(e) => setAuthor(e.target.value)}
-          placeholder="名前"
+          placeholder="Name"
         />
         <textarea
           className="form__body"
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          placeholder="コメントを書く（markdown可）"
+          placeholder="Write a comment (markdown allowed)"
           rows={3}
         />
         <div className="form__actions">
-          <button type="submit">投稿する</button>
+          <button type="submit">Post</button>
           <button type="button" className="ghost" onClick={onReset}>
-            全コメントをリセット
+            Reset all comments
           </button>
         </div>
       </form>
@@ -105,7 +106,7 @@ export function CommentBoard() {
               <span className="comment__author">{c.author}</span>
               <span className="comment__time">{c.created_at}</span>
             </div>
-            {/* 脆弱ポイント: renderComment()の結果を dangerouslySetInnerHTML で描画 */}
+            {/* Vulnerable spot: renderComment()'s output goes into dangerouslySetInnerHTML */}
             <div
               className="comment__body"
               dangerouslySetInnerHTML={{ __html: renderComment(c.body, safeMode) }}
