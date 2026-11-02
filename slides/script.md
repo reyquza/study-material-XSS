@@ -1,129 +1,131 @@
-# 発表原稿（話す用カンペ）
+# Speaker Script (talk track)
 
-スライドは要点だけ。ここに「口頭で補う説明・仕組みの噛み砕き・コード解説・想定Q&A」をまとめています。
-Zoomなら別モニタやスマホでこれを開きながら話すのがおすすめ。⏱ は目安。
+The slides carry only the essentials. This file has the spoken explanations, plain-language
+breakdowns of the mechanisms, code walkthroughs, and anticipated Q&A. Keep it open on a second
+screen while presenting. ⏱ is a rough time estimate.
 
-> 全体の狙い：**「AIの出力も信頼できない入力」**を腹落ちさせ、**DOMPurifyを"仕組みと限界"で理解**してもらう。
-> 用語は必ず噛み砕く。深掘りは3つ（画像漏洩 / SSR / URL）に絞り、残りは地図だけ。
-
----
-
-## ① タイトル（0:00）
-- 「今日はXSSの中でも"AIの出力が原因で起きるXSS"をやります。AIスタートアップの我々に一番刺さるやつ。」
-- 「前半ちょっと座学、後半は手を動かして"攻撃→対策→でも抜ける→ちゃんと対策"までやります。」
-
-## ② ゴール（⏱1分）
-- 「ゴールは4つ。特に"AIの出力も信頼できない入力"と"DOMPurifyの仕組みと限界"を持ち帰ってほしい。」
-
-## ③ アジェンダ（⏱30秒）
-- 時間配分を宣言。「後半のハンズオン＋ライブコーディングが主役です。」
+> Overall aim: make the audience internalize **"an LLM's output is untrusted input too,"** and
+> understand **DOMPurify "by how it works and its limits."**
+> Always break down jargon. Deep-dive only three (image exfiltration / SSR / URL); leave the rest as a map.
 
 ---
 
-## ④ XSSの基礎（これだけ）（⏱3分）※デモはしない
-- 「XSSの正体は一言で、"データ（ただの文字）のはずの入力が、ブラウザにコードとして実行されてしまう"こと。」
-- コード1枚を見せる：
-  - 「Reactは普通 `{text}` と書けば、`<` を `&lt;` に自動エスケープして"ただの文字"として表示してくれる。安全。」
-  - 「でも `dangerouslySetInnerHTML` を使うと話が変わる。これは中で `element.innerHTML = 文字列` をやってるのと同じ。」
-  - **仕組み**：「`innerHTML` は、渡された文字列を"ブラウザのHTMLパーサ"に食わせて、**本物のDOM要素に組み立てる**。
-     だから `<img onerror=...>` という文字列が、本物のimg要素＋イベントになって動き出す。Reactの自動エスケープはこの経路の外。」
-- 「この `text` が"信頼できない入力"だとXSS。そして今日は、その"信頼できない入力"が**AIの出力**になります。」
+## ① Title (0:00)
+- "Today we cover XSS — specifically the kind caused by rendering an LLM's output. The one that hits us as an AI startup hardest."
+- "A bit of lecture first, then hands-on: attack → defend → it still leaks → defend properly."
 
-## ⑤ AI × XSS（つかみ）（⏱30秒）
-- 「開発者は"ユーザーが入れたデータは危険"とは知ってる。でも"AIが生成したテキストは安全だろう"と、つい無防備に画面に出す。」
-- 「でもAIの出力こそ、外部に操られうる信頼できない入力なんです。」
+## ② Goals (⏱1 min)
+- "Four goals. Above all, take home 'an LLM's output is untrusted input' and 'how DOMPurify works and its limits.'"
 
-## ⑥ AIの出力＝信頼できない入力（⏱1.5分）
-- 「AIチャットや要約ツールは、AIのmarkdown出力をそのまま描画しがち。装飾（太字・リンク・画像）を効かせたいので。」
-- 「そこに攻撃コードが混じれば、さっきのコメント欄とまったく同じXSS。構図は図のとおり。」
-- **プロンプトインジェクション**の用語：「AIへの"指示文"に細工して、意図しない出力をさせる攻撃のこと。」
-
-## ⑦ インジェクション2種類（⏱1.5分）※間接を強調
-- 「直接は、ユーザーが自分でAIに"このコードを出力して"と頼むタイプ。」
-- 「間接(indirect)は、**AIが読む外部データ側**に指示が埋まってるタイプ。AIが文書を要約・引用する過程で、その毒を"素通し"してしまう。」
-- 「怖いのは、AIが悪いことをする必要が無いこと。**渡された毒を運ぶだけ**で攻撃が成立する。
-   RAG、"このURLを要約して"、"この問い合わせメールを下書きして"——全部この入口になりうる。」
+## ③ Agenda (⏱30s)
+- Announce the timing. "The hands-on + live coding in the second half is the main act."
 
 ---
 
-## ⑧ ハンズオン導入（⏱ここから約27分）
-- 「http://localhost:5173 の『🤖 AI実習』タブを開いてください。HANDSON.mdの手順に沿って進めます。」
-- 「上の『描画モード』が今日の対策レベル。🔓生描画 / 🟡DOMPurify / 🔒safe を切り替えながら観察します。」
-- 「キーが無い人は自動でモック応答になります。攻撃の再現には充分なので安心してください。」
+## ④ XSS basics (just this) (⏱3 min) — no demo
+- "XSS in one line: input that should be data (just text) ends up being executed as code by the browser."
+- Show the one code slide:
+  - "Normally in React, `{text}` auto-escapes `<` to `&lt;` and shows it as plain text. Safe."
+  - "But `dangerouslySetInnerHTML` changes things. It's the same as doing `element.innerHTML = string` inside."
+  - **Mechanism**: "`innerHTML` feeds the string to the browser's HTML parser and **builds real DOM elements**.
+     So the string `<img onerror=...>` becomes a real img element + event and starts running. React's auto-escaping is outside this path."
+- "If that `text` is untrusted input, it's XSS. And today, that 'untrusted input' is the AI's output."
 
-## ⑨ まず攻撃（直接＆間接）（⏱10分）
-- **直接**：チャットタブ →「直接①」ボタン → 送信。生描画で `onerror` が発火し、画面下の"攻撃者サーバ"に `document.cookie` が届く。
-  - 「AIに頼んだだけで、AIが攻撃コードを出力し、それが描画された瞬間にCookieが盗まれました。」
-- **間接**：要約タブ →「間接①」ボタン → 要約。毒入り文書の指示で、要約末尾に`![](…/steal?c=社外秘)`が紛れ込み、**画像が読み込まれた瞬間に情報漏洩**。
-  - 「AIは"要約しただけ"。でも文書に仕込まれた指示に従って、秘密を外に送る画像を出力してしまった。」
-- ここで全員の画面下に"盗まれたデータ"が出るのを確認（Zoomで声かけ）。
+## ⑤ AI × XSS (hook) (⏱30s)
+- "Devs know 'data the user typed is dangerous.' But they tend to render 'AI-generated text' defenselessly, assuming it's safe."
+- "Yet the AI's output is exactly the untrusted input an outsider can manipulate."
 
-## ⑩ 対策①：DOMPurifyを仕組みから（⏱4分）
-- 「じゃあ直そう。描画モードを🟡DOMPurifyに。まず"何をしてるか"を正しく理解する。」
-- **仕組み（ブラックボックスにしない）**：
-  - 「DOMPurifyは正規表現で消してるんじゃない。受け取ったHTML文字列を、**いったん本物のDOM（HTMLの木構造）に組み立て**て、
-     危険なノード・属性・URL（onerror属性やjavascript:href）を**木から削除**し、安全なHTMLに戻してる。」
-- **順番の注意**：「必ず"Markdown→HTML変換"してから"サニタイズ"。逆にすると記号(< >)が壊れたり、変換で生まれたHTMLが素通りする。」
-- 「これで直接①の `onerror` は消えて、Cookie窃取は止まる。……でも、これで終わりじゃない。ここからが本番。」
+## ⑥ LLM output = untrusted input (⏱1.5 min)
+- "AI chat and summarizers tend to render the AI's markdown directly — they want the formatting (bold, links, images)."
+- "Mix attack code in, and it's exactly the same XSS as the comment field. The diagram shows the shape."
+- **prompt injection** term: "crafting the instructions to the AI so it produces unintended output."
 
-## ⑪ 抜け穴1：画像で情報漏洩（⏱3分）※衝撃枠
-- 「🟡DOMPurifyモードのまま、間接①（画像のやつ）をもう一回やってみて。……**まだ漏れてます。**」
-- **なぜ？**：「DOMPurifyは `<img>` を"正当なタグ"として許可する。だから `![](…/steal?c=秘密)` の画像タグは残る。
-   ブラウザはその画像を取りに行く。そのURLに秘密が載ってるから、攻撃者に届く。**JSは1行も使ってない。**」
-- 「onerrorを消しても防げない。これは"出力を綺麗にする"だけでは足りない例。」
-- **対策**：「画像のsrcを自分のオリジンだけに制限する＋CSPの `img-src` で外部画像を禁止する。
-   つまり"どこへ繋ぎに行ってよいか"を縛る発想が要る。」
-  - CSP補足：「CSPは、ページが接続・実行してよい先をブラウザに宣言する仕組み。`img-src 'self'` なら外部画像を全部ブロックできる。」
-- 「🔒safeモードに切り替えると、外部画像が除去されて漏洩が止まるのが確認できます。」
-
-## ⑫ 抜け穴2：SSRでDOMPurifyが効かない（⏱3分）※原理で繋げる
-- 「さっき言った"DOMPurifyはDOMを使って動く"を覚えてますか。ここで効いてくる。」
-- 「DOMを使うってことは、**DOMが無い場所では動かない**。Next.jsのSSR——サーバ側でHTMLを作る処理——には、ブラウザのDOMが無い。」
-- **リスク**：「サーバでそのままDOMPurifyを呼ぶとエラーになるか、正しく無害化できない。
-   `jsdom`という"擬似ブラウザ"を噛ませる必要があるけど、設定をミスると**サーバ側を素通り**して、生HTMLがそのままHTMLに乗る。
-   クライアントに届いた瞬間に発火。"後からクライアントでサニタイズ"では手遅れ。」
-- **指針**：「AI出力のレンダリングは、サーバ側でなく**クライアント側（マウント後）でサニタイズ**するのが安全。
-   そもそもHTML文字列を作らず react-markdown で要素を組むのがベスト。」
-
-## ⑬ 抜け穴3：リンクのURLはDOMPurifyの外（⏱2.5分）
-- 「DOMPurifyが掃除するのは"HTML文字列"。でも、AIが返したURLを、自分のコードで `<a href={url}>` や Next.jsの `<Link href={url}>` に渡すなら、
-   それはHTMLじゃなくて"プロパティ"。**DOMPurifyを一度も通ってない。**」
-- 「だから `url = "javascript:alert(document.cookie)"` だと、クリックで発火。いくらHTMLを綺麗にしても無関係。」
-- **対策**：「URLは自分でスキームを検証する。`new URL()` で `http`/`https` 始まりだけ許可。
-   "サニタイズしたから安全"は、JSのロジックが悪ければ崩れる。」
-
-## ⑭ 他にもある（⏱2分）※地図だけ
-- 「深掘りは3つで十分。残りは"こういうのもある"と頭の片隅に。」
-- 順番ミス（変換とサニタイズの順）／設定の自爆（iframe等を許可して自爆）／mXSS。
-- mXSS補足：「DOMPurifyが"安全"と判定して返したHTMLを、ブラウザ自身が再解釈・最適化する過程で危険コードに**変異**してしまう高度なバグ。
-   だから"入れたら終わり"ではなく、ライブラリを常に最新に保つ（Dependabot等）ことが対策になる。」
-
-## ⑮ 正しい設計（結論）（⏱1.5分）
-- 5点を読み上げ。「根っこは1つ、**AIの出力も信頼できない入力として扱う**。これだけ持ち帰って。」
-
-## ⑯ 対策の全体像（⏱1分）
-- 「主対策（出力の無害化＋URL/画像の検証）と、保険（CSP・HttpOnly・最新化）を分けて考える。
-   "CSP入れたから安全""HttpOnlyにしたから安全"は誤解。保険は根本の代わりにならない。」
-
-## ⑰ まとめ（⏱1分）
-- チェックリストを読み上げ。
-
-## ⑱ もっと学ぶ
-- 「LLM特有のリスクはOWASP Top 10 for LLM、XSS全般はPortSwiggerのラボがおすすめ。自分もここで手を動かして学びました。」
-- Q&Aへ。
+## ⑦ Two kinds of injection (⏱1.5 min) — stress indirect
+- "Direct is when the user themselves asks the AI to 'output this code.'"
+- "Indirect is when the instruction is buried in **the external data the AI reads**. The AI passes the poison through while summarizing/quoting."
+- "The scary part: the AI doesn't need to do anything bad. **It just carries the poison it was handed,** and the attack succeeds.
+   RAG, 'summarize this URL,' 'draft a reply to this inquiry email' — all can be an entry point."
 
 ---
 
-## 想定質問への回答メモ（CTO対策）
-- **Q: AIの出力をなぜ信用しちゃダメ？モデルはこちらの持ち物では？**
-  A: 出力は入力（プロンプト/外部文書）に左右される。間接インジェクションで第三者が実質的に出力を操れる。だから"信頼できない入力"。
-- **Q: DOMPurify入れれば十分では？**
-  A: 仕組み上、画像による情報漏洩やURL（プロパティ経由）は守備範囲外。SSRではそもそも動かない罠も。検証＋CSP＋設計が要る。
-- **Q: react-markdown なら安全？**
-  A: 標準は要素を組み立て、`javascript:` もブロックするので安全側。ただし `rehype-raw` で生HTMLを有効化すると穴が開く（`rehype-sanitize`併用が必要）。
-- **Q: Geminiが危険な出力を弾くのでは？**
-  A: XSS payloadは"有害コンテンツ"ではなくただのコードなので通常は素通し。加えて今日の間接型は payload が文書側にあるので、モデルの判断に依存しない。
-- **Q: このデモ、サーバ(FastAPI)は脆弱？**
-  A: サーバはJSONを返すだけでXSSは起きない。脆弱なのはフロントの描画。意図的にそう設計している。
-- **Q: alert や steal は本物の被害？**
-  A: alert は"コードが実行できた"証明。steal はローカルの模擬攻撃者サーバで、外部には一切送っていない（教材用）。
+## ⑧ Hands-on intro (⏱~27 min from here)
+- "Open the 'AI Lab' tab at http://localhost:5173. We'll follow HANDSON.md."
+- "The 'render mode' at the top is today's defense level. Toggle Raw / DOMPurify / safe and observe."
+- "No key? It falls back to mock automatically. That's plenty to reproduce the attack — don't worry."
+
+## ⑨ First, attack (direct & indirect) (⏱10 min)
+- **Direct**: Chat tab → "Direct #1" button → Send. In Raw render, the image loads and the secret lands in the attacker panel.
+  - "You just asked the AI to turn a URL into an image, and the moment it rendered, data leaked."
+- **Indirect**: Summarizer tab → "Indirect #1" button → Summarize. The poisoned doc's banner image survives into the summary; **the moment the image loads, data exfiltrates**.
+  - "The AI 'just summarized.' But it obeyed the instruction buried in the document and emitted an image that sends the secret out."
+- Confirm everyone sees "stolen data" appear in the panel (call it out on the video call).
+
+## ⑩ Defense #1: DOMPurify, from how it works (⏱4 min)
+- "Let's fix it. Switch render mode to DOMPurify. First, correctly understand what it does."
+- **Mechanism (not a black box)**:
+  - "DOMPurify isn't deleting things with regex. It **builds the incoming HTML string into a real DOM (tree)**,
+     **removes dangerous nodes/attributes/URLs (onerror attribute, javascript: href) from the tree**, and returns safe HTML."
+- **Order note**: "Always 'Markdown → HTML' first, THEN 'sanitize.' Reversed, symbols (< >) break or the converted HTML slips through."
+- "This removes Direct #2's `onerror` and stops cookie theft. …But that's not the end. Here's the real part."
+
+## ⑪ Bypass 1: image exfiltration (⏱3 min) — the shocker
+- "Stay in DOMPurify mode and run Indirect #1 (the image one) again. …**It still leaks.**"
+- **Why?**: "DOMPurify allows `<img>` as a 'legitimate tag.' So the `![](…/steal?c=secret)` image survives.
+   The browser fetches it. The secret in the URL reaches the attacker. **Not a single line of JS.**"
+- "Removing onerror doesn't help. This is a case where 'cleaning the output' isn't enough."
+- **Defense**: "Restrict image src to your own origin + block external images with CSP `img-src`.
+   You need the mindset of constraining 'where it's allowed to connect.'"
+  - CSP note: "CSP declares to the browser where the page may connect/execute. `img-src 'self'` blocks all external images."
+- "Switch to safe mode and the external image is removed — you can confirm the leak stops."
+
+## ⑫ Bypass 2: DOMPurify doesn't work under SSR (⏱3 min) — connect via principle
+- "Remember I said 'DOMPurify works using the DOM'? It pays off here."
+- "Using the DOM means **it can't work where there's no DOM**. Next.js SSR — generating HTML on the server — has no browser DOM."
+- **Risk**: "Calling DOMPurify as-is on the server either errors or doesn't sanitize correctly.
+   You need to wire in `jsdom` (a fake browser), but a misconfig lets it **slip through on the server**, riding raw HTML into the page.
+   It fires the moment it reaches the client. 'Sanitize later on the client' is too late."
+- **Guidance**: "Render AI output safely by **sanitizing on the client (after mount)**, not on the server.
+   Best of all, don't build HTML strings — build elements with react-markdown."
+
+## ⑬ Bypass 3: link URLs are outside DOMPurify (⏱2.5 min)
+- "What DOMPurify cleans is an 'HTML string.' But if you take the AI's returned URL and pass it to `<a href={url}>` or Next.js `<Link href={url}>` yourself,
+   that's not HTML — it's a 'prop.' **It never went through DOMPurify.**"
+- "So if `url = 'javascript:alert(document.cookie)'`, it fires on click. No amount of HTML cleaning matters."
+- **Defense**: "Validate the URL scheme yourself. `new URL()` and allow only `http`/`https`.
+   'We sanitized, so we're safe' falls apart if the JS logic is bad."
+
+## ⑭ More pitfalls (⏱2 min) — just a map
+- "Three deep dives are enough. Keep the rest in the back of your mind."
+- Wrong order (convert vs sanitize) / config self-destruct (allowing iframe etc.) / mXSS.
+- mXSS note: "An advanced bug where the browser's own re-parsing/optimization turns HTML that DOMPurify deemed 'safe' into dangerous code.
+   So it's not 'add it and you're done' — keeping the library up to date (Dependabot etc.) is the defense."
+
+## ⑮ Designing it right (conclusion) (⏱1.5 min)
+- Read the five points. "The root is one thing: **treat the AI's output as untrusted input, too.** If nothing else, take this home."
+
+## ⑯ The full picture (⏱1 min)
+- "Separate primary defenses (output sanitization + URL/image validation) from safety nets (CSP, HttpOnly, updates).
+   'CSP so we're safe' / 'HttpOnly so we're safe' are misconceptions. Safety nets don't replace the root fix."
+
+## ⑰ Wrap-up (⏱1 min)
+- Read the checklist.
+
+## ⑱ Learn more
+- "For LLM-specific risks, OWASP Top 10 for LLM; for XSS in general, PortSwigger's labs. I learned hands-on there myself."
+- Go to Q&A.
+
+---
+
+## Anticipated Q&A (for the tough reviewer)
+- **Q: Why not trust the AI's output? Isn't the model ours?**
+  A: The output depends on the input (prompt / external document). With indirect injection, a third party effectively controls the output. So it's "untrusted input."
+- **Q: Isn't adding DOMPurify enough?**
+  A: By design, image-based exfiltration and URLs (via props) are out of scope. There's also the trap of it not working under SSR. You need validation + CSP + design.
+- **Q: Is react-markdown safe?**
+  A: By default it builds elements and blocks `javascript:`, so it's on the safe side. But enabling raw HTML with `rehype-raw` opens a hole (you must pair it with `rehype-sanitize`).
+- **Q: Won't Gemini block dangerous output?**
+  A: An XSS payload isn't "harmful content," it's just code, so it usually passes through. Also, today's indirect type keeps the payload in the document, so it doesn't depend on the model's judgment.
+- **Q: Is the server (FastAPI) in this demo vulnerable?**
+  A: The server just returns JSON; no XSS there. The vulnerable part is the frontend render. It's designed that way on purpose.
+- **Q: Are the alert and steal real harm?**
+  A: The alert proves "code executed." steal is a local mock attacker server; nothing is sent outside (it's teaching material).

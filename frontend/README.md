@@ -1,37 +1,37 @@
-# frontend — React + TypeScript のコメント画面
+# frontend — React + TypeScript
 
-バックエンドからコメント(markdown)を取得し、画面に描画します。**XSSはここで起きます。**
+Fetches the LLM output / comments from the backend and renders them on screen. **XSS happens here.**
 
-## 起動
-
+## Run
 ```bash
 cd frontend
 bun install
 bun run dev
 ```
-
 → http://localhost:5173
 
-※先に backend を起動しておくこと（`/api` は vite proxy 経由で 8000 に届きます）。
+Start the backend first (`/api` reaches :8000 via the vite proxy).
 
-## ファイル
+## Files
 
-| ファイル | 役割 |
+| File | Role |
 |---|---|
-| `src/App.tsx` | 画面本体。投稿フォーム、脆弱/対策トグル、コメント描画 |
-| `src/render.ts` | **今日の主役**。markdown→HTML変換とサニタイズ。`safeMode` で挙動が変わる |
-| `src/api.ts` | バックエンドAPI呼び出し |
-| `src/main.tsx` | 起動 + デモ用のダミーCookie設定 |
+| `src/render.ts` | **The star.** markdown→HTML + sanitization. `renderLLM(vuln/dompurify/safe)` and `renderComment`. |
+| `src/ai/AiLab.tsx` | AI Lab tab: chat / summarizer, render-mode toggle, attacker-receive panel. |
+| `src/ai/aiApi.ts` | Calls the backend AI endpoints. |
+| `src/CommentBoard.tsx` | Basics: plain comment XSS. |
+| `src/App.tsx` | Shell with tab navigation. |
+| `src/main.tsx` | Bootstrap + a demo cookie (no HttpOnly, on purpose). |
 
-## 重要ポイント（`src/App.tsx` / `src/render.ts`）
+## Key points (`src/render.ts`)
 
-- 描画は `dangerouslySetInnerHTML` で行っている。
-- `marked`（markdownライブラリ）は **無害化しない**（公式仕様）。→ 脆弱モードで発火。
-- `DOMPurify`（サニタイザ）で無害化 → 対策モードで防御成功。
-- React標準の `{c.body}` や `href={url}` の保護は、`dangerouslySetInnerHTML` を使うと **効かない**。
-  これが「Reactだから安全」の落とし穴。
+- Rendering uses `dangerouslySetInnerHTML`.
+- `marked` (the markdown library) **does not sanitize** (by design) → fires in the "vuln" mode.
+- `DOMPurify` (sanitizer) neutralizes JS-based payloads → but **image exfiltration still gets through** in plain "dompurify" mode.
+- The "safe" mode adds a URL-scheme allowlist and drops external-origin images.
+- React's built-in protection on `{text}` / `href={url}` **does not apply** once you use `dangerouslySetInnerHTML`.
+  That's the "it's React, so it's safe" pitfall.
 
-## 型エラーが出たら
+## If you hit type errors
 
-`dompurify` の型が見つからない等が出た場合は `bun add -d @types/dompurify` を実行してください
-（多くのバージョンでは型が同梱されているため不要です）。
+If `dompurify` types are missing, run `bun add -d @types/dompurify` (usually unnecessary — most versions ship their own types).

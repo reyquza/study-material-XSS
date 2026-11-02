@@ -5,12 +5,12 @@ export type Comment = {
   created_at: string;
 };
 
-// vite proxy 経由でバックエンド(8000)に届く。
+// Reaches the backend (:8000) via the vite proxy.
 const BASE = "/api/comments";
 
 export async function fetchComments(): Promise<Comment[]> {
   const res = await fetch(BASE);
-  if (!res.ok) throw new Error(`一覧取得に失敗: ${res.status}`);
+  if (!res.ok) throw new Error(`Failed to fetch comments: ${res.status}`);
   return res.json();
 }
 
@@ -20,7 +20,7 @@ export async function postComment(author: string, body: string): Promise<Comment
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ author, body }),
   });
-  if (!res.ok) throw new Error(`投稿に失敗: ${res.status}`);
+  if (!res.ok) throw new Error(`Failed to post comment: ${res.status}`);
   return res.json();
 }
 

@@ -1,45 +1,45 @@
-# backend — FastAPI（AI output XSS + Comment API）
+# backend — FastAPI (AI-output XSS + Comment API)
 
-AIを呼んでテキストを返すAPIと、基礎パートのコメントAPI。どちらも**JSONを返すだけ**で、
-XSSはフロントの描画で起きます（APIは安全）。
+An API that calls an LLM and returns text, plus the basics comment API. Both **only return JSON**,
+so the XSS happens in the frontend render (the API itself is safe).
 
 ## Run
 ```bash
 cd backend
-# （任意）Geminiを使うなら: cp .env.example .env して GEMINI_API_KEY を記入
+# (Optional) to use Gemini: cp .env.example .env and fill in GEMINI_API_KEY
 uv run uvicorn app.main:app --reload --port 8000
 ```
-`uv run` がPython・仮想環境・依存の用意まで自動。API一覧: http://localhost:8000/docs
+`uv run` handles Python, the virtualenv, and dependencies automatically. API list: http://localhost:8000/docs
 
-## AI endpoints（`app/ai.py`）
-- `POST /api/ai/chat` … AIチャット（直接インジェクション用）
-- `POST /api/ai/summarize` … 文書要約（間接インジェクション用）
-- `GET  /api/ai/health` … **Gemini接続の診断**（使えるモデル一覧・直近の失敗理由）
-- `GET  /api/ai/steal?c=...` … **模擬攻撃者サーバ**。画像/fetchで送られた"盗難データ"を記録し1x1 GIFを返す
-- `GET  /api/ai/steal-log` / `DELETE /api/ai/steal-log` … 盗難データの一覧 / クリア
+## AI endpoints (`app/ai.py`)
+- `POST /api/ai/chat` … AI chat (for direct injection)
+- `POST /api/ai/summarize` … document summarizer (for indirect injection)
+- `GET  /api/ai/health` … **Gemini connection diagnostics** (usable model list / latest failure reason)
+- `GET  /api/ai/steal?c=...` … **mock attacker server**. Records "stolen data" sent via image/fetch and returns a 1x1 GIF
+- `GET  /api/ai/steal-log` / `DELETE /api/ai/steal-log` … list / clear the stolen data
 
-## Gemini & フォールバック
-- `GEMINI_API_KEY` が**あれば** Gemini を呼ぶ。複数モデルを順に試し、失敗したら次へ。
-  全滅したら **ListModels で「このキーで使えるモデル」を自動検出**して再試行。それでもダメならモック。
-- `GEMINI_API_KEY` が**無ければ**最初からモック。→ キー無しでもハンズオンが成立（当日落ちない）。
-- モックは入力(プロンプト/文書)から payload（画像・imgタグ・URL）を取り出して出力に通す。
-  → 「間接インジェクション＝AIは毒を素通しするだけ」の忠実な再現。
+## Gemini & fallback
+- **With** `GEMINI_API_KEY`, it calls Gemini. It tries several models in order; on failure it moves to the next.
+  If all fail, it **auto-discovers "models usable with this key" via ListModels** and retries. If that still fails, mock.
+- **Without** `GEMINI_API_KEY`, it goes straight to mock. → The hands-on works even without a key (the demo never dies).
+- The mock extracts the payload (image / img tag / URL) from the input and passes it through.
+  → A faithful reproduction of "indirect injection = the AI just carries the poison through."
 
-### `provider: mock` から抜けられないとき
+### Stuck on `provider: mock`?
 ```bash
 curl http://localhost:8000/api/ai/health
 ```
-- `key_set: false` → `.env` が読まれていない（置いて uvicorn 再起動）。
-- `available_generateContent_models` → このキーで使える名前。既定が含まれなければ 404 で全滅する。
-  → `.env` に `GEMINI_MODELS=<available の名前>` を設定（自動検出でも復帰します）。
-- `last_error` → 直近の失敗理由（404=モデル無し / 503,429=混雑・レート制限 など）。
+- `key_set: false` → `.env` isn't loaded (place it and restart uvicorn).
+- `available_generateContent_models` → names usable with this key. If the defaults aren't included, they 404 and all fail.
+  → Set `GEMINI_MODELS=<a name from available>` in `.env` (auto-discovery also recovers).
+- `last_error` → the latest failure reason (404 = no such model / 503, 429 = congestion/rate limit, etc.).
 
-> 教材メモ: 強いモデルは露骨な「Cookie窃取コードを出して」は拒否する。ハンズオンは
-> 「URLを画像にして」「onerrorの例を見せて」等の**無害に見える依頼**で payload を出させている。
-> ＝「モデルの安全フィルタに頼れない」という結論の実演。
+> Teaching note: strong models refuse blunt "output cookie-stealing code" requests. The hands-on makes the
+> model emit a payload via **innocent-looking requests** ("turn this URL into an image", "show an onerror example").
+> = a live demonstration of the conclusion "you can't rely on the model's safety filter."
 
-## Comment API（基礎パート）
+## Comment API (basics)
 - `GET /api/comments` / `POST /api/comments` / `DELETE /api/comments`
-- 本文(markdown)を**無害化せず**保存・返却。XSSはフロントの描画で起きる。
+- Stores and returns the body (markdown) **without sanitization**. The XSS happens in the frontend render.
 
-> 教材のためわざと脆弱。本番にコピーしないこと。`/api/ai/steal` は外部に一切送信しません（ローカル記録のみ）。
+> Intentionally vulnerable for teaching. Don't copy into production. `/api/ai/steal` sends nothing externally (local record only).
